@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Mô hình học tập tương tác 3D về Trái Đất và Mặt Trời." />
+  <title>Khám phá Trái Đất và Mặt Trời</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon">✦</span>
+        <div>
+          <p class="eyebrow">HỌC LIỆU TƯƠNG TÁC 3D</p>
+          <h1>Trái Đất và Mặt Trời</h1>
+        </div>
+      </div>
+      <div class="top-note"><span class="live-dot"></span> Mô phỏng không gian</div>
+    </header>
+
+    <section class="stage" aria-label="Mô hình Trái Đất và Mặt Trời 3D">
+      <div class="stage-heading">
+        <span class="stage-kicker">KHÁM PHÁ VŨ TRỤ</span>
+        <p id="stageCaption">Trái Đất đang tự quay quanh trục</p>
+      </div>
+      <div id="scene" class="scene">
+        <div class="loading" id="loading">Đang tải mô hình 3D…</div>
+        <div class="error-box" id="errorBox" hidden>
+          <strong>Không tải được mô hình 3D.</strong>
+          <span>Hãy kiểm tra thư mục <code>model_3d</code> và tên hai tệp GLB.</span>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="legend-dot day"></i> Khu vực được chiếu sáng</span>
+        <span><i class="legend-dot night"></i> Khu vực ban đêm</span>
+      </div>
+      <div class="hint">Kéo chuột để quan sát · Cuộn chuột để phóng to/thu nhỏ</div>
+    </section>
+
+    <section class="control-row" aria-label="Điều khiển mô hình">
+      <button id="sunToggle" class="sun-button" type="button" aria-pressed="false">
+        <span class="sun-symbol">☼</span>
+        <span><strong id="sunButtonTitle">Hiện Mặt Trời</strong><small>Bật / tắt nguồn sáng</small></span>
+      </button>
+      <div class="controls-right">
+        <button id="pauseButton" class="control-button" type="button">Tạm dừng</button>
+        <button id="resetButton" class="control-button" type="button">Đặt lại góc nhìn</button>
+      </div>
+    </section>
+
+    <section class="info-panel">
+      <div class="info-title">
+        <span class="info-mark">i</span>
+        <h2>Các bộ phận trên Trái Đất</h2>
+      </div>
+      <div class="term-grid">
+        <div class="term"><b>Trục Trái Đất</b><span>Đường tưởng tượng nối Cực Bắc và Cực Nam.</span></div>
+        <div class="term"><b>Cực Bắc</b><span>Đầu phía Bắc của trục Trái Đất.</span></div>
+        <div class="term"><b>Cực Nam</b><span>Đầu phía Nam của trục Trái Đất.</span></div>
+        <div class="term"><b>Đường Xích đạo</b><span>Đường tròn chia Trái Đất thành bán cầu Bắc và bán cầu Nam.</span></div>
+        <div class="term"><b>Góc nghiêng 23°27′</b><span>Góc nghiêng của trục Trái Đất so với phương vuông góc với mặt phẳng quỹ đạo.</span></div>
+        <div class="term"><b>Góc 66°33′</b><span>Góc giữa trục Trái Đất và mặt phẳng quỹ đạo.</span></div>
+      </div>
+    </section>
+
+    <footer>Học liệu mô phỏng phục vụ mục đích học tập · Các mô hình 3D được tải từ thư viện bên ngoài</footer>
+  </main>
+  <script type="module" src="./script.js"></script>
+</body>
+</html>
