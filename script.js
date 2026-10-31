@@ -16,13 +16,13 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050914);
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-camera.position.set(0, 1.1, 13.8);
+camera.position.set(0, 1.5, 12.0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.25;
 sceneElement.appendChild(renderer.domElement);
 
 const labelRenderer = new CSS2DRenderer();
@@ -34,27 +34,81 @@ sceneElement.appendChild(labelRenderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.055;
-controls.minDistance = 7;
-controls.maxDistance = 24;
+controls.minDistance = 6;
+controls.maxDistance = 55;
 controls.target.set(0, 0, 0);
 controls.enablePan = false;
 
+// ==========================================
+// 🌌 NỀN VŨ TRỤ VỚI CÁC NGÔI SAO LẤP LÁNH
+// ==========================================
+let starMaterial;
+function createStarfield() {
+  const starsCount = 1200;
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(starsCount * 3);
+  const colors = new Float32Array(starsCount * 3);
+
+  for (let i = 0; i < starsCount; i++) {
+    const r = 40 + Math.random() * 50;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos((Math.random() * 2) - 1);
+
+    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i * 3 + 2] = r * Math.cos(phi);
+
+    const brightness = 0.5 + Math.random() * 0.5;
+    colors[i * 3] = brightness;
+    colors[i * 3 + 1] = brightness * (0.85 + Math.random() * 0.15);
+    colors[i * 3 + 2] = brightness;
+  }
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  starMaterial = new THREE.PointsMaterial({
+    size: 0.11,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8
+  });
+
+  const starField = new THREE.Points(geometry, starMaterial);
+  scene.add(starField);
+}
+createStarfield();
+
+// Ánh sáng nền
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
 scene.add(ambientLight);
 
-const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+const fillLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.9);
 scene.add(fillLight);
 
-const earthPivot = new THREE.Group();
-earthPivot.position.set(-2.45, 0, 0);
-scene.add(earthPivot);
+// Nhóm quỹ đạo Trái Đất quay quanh Mặt Trời
+const earthOrbitGroup = new THREE.Group();
+scene.add(earthOrbitGroup);
 
+// Hằng số khoảng cách
+const EARTH_SUN_DISTANCE = -15.0; 
+
+// Nhóm Trái Đất
+const earthPivot = new THREE.Group();
+earthPivot.position.set(0, 0, 0);
+earthOrbitGroup.add(earthPivot);
+
+// Nhóm quay của Mặt Trăng quanh Trái Đất
+const moonOrbitPivot = new THREE.Group();
+earthPivot.add(moonOrbitPivot);
+
+// Mặt Trời đặt ở tâm (0, 0, 0)
 const sunPivot = new THREE.Group();
-sunPivot.position.set(3.25, 0, 0);
+sunPivot.position.set(0, 0, 0);
 scene.add(sunPivot);
 
-const sunLight = new THREE.DirectionalLight(0xfff3d6, 4.5);
-sunLight.position.copy(sunPivot.position);
+// Ánh sáng Mặt Trời
+const sunLight = new THREE.DirectionalLight(0xffffff, 8.0);
 sunLight.target.position.copy(earthPivot.position);
 scene.add(sunLight, sunLight.target);
 sunLight.visible = false;
@@ -65,14 +119,22 @@ scene.add(sunGlow);
 
 let earthModel = null;
 let sunModel = null;
+let moonModel = null;
 let isSunVisible = false;
 let isPaused = false;
 let earthRadius = 1.8;
-let sunRadius = 1.2;
 
-// Lưu trữ các material gốc của Trái Đất để chuyển đổi qua lại
+// Biến quản lý Morphing chuyển cảnh mượt
+let isTransitioning = false;
+let targetCameraPosition = new THREE.Vector3(0, 1.5, 12.0);
+let targetControlsTarget = new THREE.Vector3(0, 0, 0);
+let targetEarthPosition = new THREE.Vector3(0, 0, 0);
+let targetAmbientIntensity = 1.2;
+let targetFillIntensity = 0.9;
+let targetOrbitRotationY = 0;
+
 let earthOriginalMaterials = new Map();
-
+let moonOriginalMaterials = new Map();
 const clock = new THREE.Clock();
 
 function normalizeModel(root, targetSize) {
@@ -134,7 +196,7 @@ function addEarthAnnotations(radius) {
     equatorPoints.push(u.clone().multiplyScalar(Math.cos(a) * radius * 1.008)
       .add(v.clone().multiplyScalar(Math.sin(a) * radius * 1.008)));
   }
-  addLine(earthPivot, equatorPoints, 0x8bd8ff, 0.88);
+  addLine(earthPivot, equatorPoints, 0x8bd8ff, 0x88);
 
   const equatorLabel = makeLabel("Đường Xích đạo");
   equatorLabel.position.copy(u.clone().multiplyScalar(radius * 1.35).add(new THREE.Vector3(0, -0.2, 0.2)));
@@ -161,20 +223,33 @@ function setSunVisible(visible) {
   isSunVisible = visible;
   sunPivot.visible = visible;
   sunLight.visible = visible;
-  sunGlow.intensity = visible ? 1.5 : 0;
+  sunGlow.intensity = visible ? 2.5 : 0;
 
+  isTransitioning = true; // Bắt đầu kích hoạt hiệu ứng chuyển cảnh mượt
+
+  if (visible) {
+    targetEarthPosition.set(EARTH_SUN_DISTANCE, 0, 0);
+    targetCameraPosition.set(0, 5.0, 32.0);
+    targetControlsTarget.set(0, 0, 0);
+    targetAmbientIntensity = 0.35;
+    targetFillIntensity = 0.25;
+  } else {
+    targetEarthPosition.set(0, 0, 0);
+    earthOrbitGroup.rotation.y = 0;
+    targetCameraPosition.set(0, 1.5, 12.0);
+    targetControlsTarget.set(0, 0, 0);
+    targetAmbientIntensity = 1.2;
+    targetFillIntensity = 0.9;
+    targetOrbitRotationY = 0;
+  }
+
+  // Đổi Material theo trạng thái
   if (earthModel) {
     earthModel.traverse((object) => {
       if (object.isMesh) {
         if (visible) {
-          // Khi BẬT Mặt Trời: Dùng material chuẩn để có vùng sáng / vùng tối rõ rệt
-          if (earthOriginalMaterials.has(object)) {
-            object.material = earthOriginalMaterials.get(object);
-          }
-          ambientLight.intensity = 0.25;
-          fillLight.intensity = 0.2;
+          if (earthOriginalMaterials.has(object)) object.material = earthOriginalMaterials.get(object);
         } else {
-          // Khi TẮT Mặt Trời: Chuyển sang MeshBasicMaterial để Trái Đất sáng đều, rõ nét, không bị tối thui
           if (!object.userData.basicMaterial) {
             const origMat = earthOriginalMaterials.get(object);
             object.userData.basicMaterial = new THREE.MeshBasicMaterial({
@@ -183,8 +258,25 @@ function setSunVisible(visible) {
             });
           }
           object.material = object.userData.basicMaterial;
-          ambientLight.intensity = 1.2;
-          fillLight.intensity = 1.0;
+        }
+      }
+    });
+  }
+
+  if (moonModel) {
+    moonModel.traverse((object) => {
+      if (object.isMesh) {
+        if (visible) {
+          if (moonOriginalMaterials.has(object)) object.material = moonOriginalMaterials.get(object);
+        } else {
+          if (!object.userData.basicMaterial) {
+            const origMat = moonOriginalMaterials.get(object);
+            object.userData.basicMaterial = new THREE.MeshBasicMaterial({
+              map: origMat.map || null,
+              color: origMat.color || new THREE.Color(0xffffff)
+            });
+          }
+          object.material = object.userData.basicMaterial;
         }
       }
     });
@@ -193,23 +285,26 @@ function setSunVisible(visible) {
   sunToggle.setAttribute("aria-pressed", String(visible));
   sunButtonTitle.textContent = visible ? "Ẩn Mặt Trời" : "Hiện Mặt Trời";
   stageCaption.textContent = visible
-    ? "Mặt Trời chiếu sáng Trái Đất"
-    : "Trái Đất đang tự quay quanh trục";
+    ? "Mặt Trời xuất hiện · Trái Đất quay trên quỹ đạo quanh Mặt Trời"
+    : "Trái Đất là trung tâm · Đang tự quay quanh trục";
 }
 
 async function loadModels() {
   const loader = new GLTFLoader();
   try {
-    const [earthGltf, sunGltf] = await Promise.all([
+    const [earthGltf, sunGltf, moonGltf] = await Promise.all([
       loader.loadAsync("./model_3d/Earth.glb"),
-      loader.loadAsync("./model_3d/Sun.glb")
+      loader.loadAsync("./model_3d/Sun.glb"),
+      loader.loadAsync("./model_3d/moon.glb")
     ]);
 
     earthModel = earthGltf.scene;
     sunModel = sunGltf.scene;
+    moonModel = moonGltf.scene;
 
     earthRadius = normalizeModel(earthModel, 3.45);
-    sunRadius = normalizeModel(sunModel, 2.5);
+    normalizeModel(sunModel, 4.5);
+    normalizeModel(moonModel, 1.0);
 
     earthModel.traverse((object) => {
       if (object.isMesh) {
@@ -217,7 +312,25 @@ async function loadModels() {
         object.receiveShadow = true;
         if (object.material) {
           earthOriginalMaterials.set(object, object.material);
-          // Mặc định ban đầu chưa bật Mặt Trời nên dùng MeshBasicMaterial cho sáng rõ
+          if ("roughness" in object.material) object.material.roughness = 0.35;
+          
+          object.userData.basicMaterial = new THREE.MeshBasicMaterial({
+            map: object.material.map || null,
+            color: object.material.color || new THREE.Color(0xffffff)
+          });
+          object.material = object.userData.basicMaterial;
+        }
+      }
+    });
+
+    moonModel.traverse((object) => {
+      if (object.isMesh) {
+        object.castShadow = true;
+        object.receiveShadow = true;
+        if (object.material) {
+          moonOriginalMaterials.set(object, object.material);
+          if ("roughness" in object.material) object.material.roughness = 0.5;
+
           object.userData.basicMaterial = new THREE.MeshBasicMaterial({
             map: object.material.map || null,
             color: object.material.color || new THREE.Color(0xffffff)
@@ -232,13 +345,17 @@ async function loadModels() {
         object.material = object.material.clone();
         if ("emissive" in object.material) {
           object.material.emissive = new THREE.Color(0xff8b24);
-          object.material.emissiveIntensity = Math.max(object.material.emissiveIntensity || 0, 0.8);
+          object.material.emissiveIntensity = Math.max(object.material.emissiveIntensity || 0, 1.5);
         }
       }
     });
 
     earthPivot.add(earthModel);
     sunPivot.add(sunModel);
+
+    moonModel.position.set(2.8, 0, 0);
+    moonOrbitPivot.add(moonModel);
+
     addEarthAnnotations(earthRadius);
 
     earthModel.rotation.y = -0.35;
@@ -261,9 +378,13 @@ pauseButton.addEventListener("click", () => {
   pauseButton.textContent = isPaused ? "Tiếp tục" : "Tạm dừng";
 });
 resetButton.addEventListener("click", () => {
-  camera.position.set(0, 1.1, 13.8);
-  controls.target.set(0, 0, 0);
-  controls.update();
+  if (isSunVisible) {
+    targetCameraPosition.set(0, 5.0, 32.0);
+  } else {
+    targetCameraPosition.set(0, 1.5, 12.0);
+  }
+  targetControlsTarget.set(0, 0, 0);
+  isTransitioning = true;
 });
 
 function resize() {
@@ -280,10 +401,47 @@ resize();
 function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.05);
+  const elapsedTime = clock.getElapsedTime();
+
+  // 1. Sao lấp lánh nhẹ nhàng
+  if (starMaterial) {
+    starMaterial.opacity = 0.7 + Math.sin(elapsedTime * 2.5) * 0.15;
+  }
+  
+  // 2. Chuyển động xoay của các vật thể
   if (!isPaused) {
     if (earthModel) earthModel.rotation.y += delta * 0.16;
+    if (moonModel) moonModel.rotation.y += delta * 0.10;
+    
+    moonOrbitPivot.rotation.y += delta * 0.4;
+
+    if (isSunVisible) {
+      earthOrbitGroup.rotation.y += delta * 0.25;
+      sunLight.position.copy(sunPivot.position);
+      sunLight.target.position.copy(earthPivot.localToWorld(new THREE.Vector3(0, 0, 0)));
+      sunLight.target.updateMatrixWorld();
+    } else {
+      earthOrbitGroup.rotation.y = THREE.MathUtils.lerp(earthOrbitGroup.rotation.y, targetOrbitRotationY, 0.05);
+    }
+
     if (sunModel) sunModel.rotation.y += delta * 0.10;
   }
+
+  // 3. HIỆU ỨNG MORPHING MƯỢT MÀ (CHỈ CHẠY KHI ĐANG CHUYỂN ĐỔI, SAU ĐÓ TỰ DỪNG ĐỂ BẠN TỰ DO XOAY CHUỘT)
+  earthPivot.position.lerp(targetEarthPosition, 0.05);
+  ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbientIntensity, 0.05);
+  fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, targetFillIntensity, 0.05);
+
+  if (isTransitioning) {
+    camera.position.lerp(targetCameraPosition, 0.05);
+    controls.target.lerp(targetControlsTarget, 0.05);
+
+    // Khi camera đã đến gần đích, tắt cờ chuyển cảnh để trả lại quyền điều khiển hoàn toàn cho chuột
+    if (camera.position.distanceTo(targetCameraPosition) < 0.1) {
+      isTransitioning = false;
+    }
+  }
+
   controls.update();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
