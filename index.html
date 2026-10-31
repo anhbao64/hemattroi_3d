@@ -50,10 +50,16 @@
     </section>
 
     <section class="control-row" aria-label="Điều khiển mô hình">
-      <button id="sunToggle" class="sun-button" type="button" aria-pressed="false">
-        <span class="sun-symbol">☼</span>
-        <span><strong id="sunButtonTitle">Hiện Mặt Trời</strong><small>Bật / tắt nguồn sáng</small></span>
-      </button>
+      <div class="toggle-group">
+        <button id="sunToggle" class="sun-button" type="button" aria-pressed="false">
+          <span class="sun-symbol">☼</span>
+          <span><strong id="sunButtonTitle">Hiện Mặt Trời</strong><small>Bật / tắt nguồn sáng</small></span>
+        </button>
+        <button id="moonToggle" class="sun-button moon-button" type="button" aria-pressed="false">
+          <span class="sun-symbol">☾</span>
+          <span><strong id="moonButtonTitle">Hiện Mặt Trăng</strong><small>Bật / tắt Mặt Trăng</small></span>
+        </button>
+      </div>
       <div class="controls-right">
         <button id="pauseButton" class="control-button" type="button">Tạm dừng</button>
         <button id="resetButton" class="control-button" type="button">Đặt lại góc nhìn</button>

@@ -10,6 +10,8 @@ const sunToggle = document.getElementById("sunToggle");
 const sunButtonTitle = document.getElementById("sunButtonTitle");
 const pauseButton = document.getElementById("pauseButton");
 const resetButton = document.getElementById("resetButton");
+const moonToggle = document.getElementById("moonToggle");
+const moonButtonTitle = document.getElementById("moonButtonTitle");
 const stageCaption = document.getElementById("stageCaption");
 
 const scene = new THREE.Scene();
@@ -213,6 +215,7 @@ earthPivot.add(earthTiltGroup);
 // Nhóm quay của Mặt Trăng quanh Trái Đất
 const moonOrbitPivot = new THREE.Group();
 earthPivot.add(moonOrbitPivot);
+moonOrbitPivot.visible = false; // Mặt Trăng ban đầu bị tắt
 
 // Mặt Trời đặt ở tâm (0, 0, 0)
 const sunPivot = new THREE.Group();
@@ -233,6 +236,7 @@ let earthModel = null;
 let sunModel = null;
 let moonModel = null;
 let isSunVisible = false;
+let isMoonVisible = false;
 let isPaused = false;
 let earthRadius = 1.8;
 
@@ -279,27 +283,46 @@ function addLine(parent, points, color = 0xffd27a, opacity = 0.9) {
   return line;
 }
 
+// Các chú thích chỉ hiện ở chế độ "chỉ Trái Đất" (khi tắt Mặt Trời).
+// Lưu ý: nhãn CSS2D không tự ẩn theo nhóm cha, nên đặt .visible cho từng đối tượng.
+const earthDetailObjects = [];
+let earthNameLabel = null; // tên "Trái Đất" - chỉ hiện khi bật Mặt Trời
+
+function trackDetail(object) {
+  earthDetailObjects.push(object);
+  return object;
+}
+
+function updateEarthDetailVisibility() {
+  earthDetailObjects.forEach((object) => { object.visible = !isSunVisible; });
+  if (earthNameLabel) earthNameLabel.visible = isSunVisible;
+}
+
 function addEarthAnnotations(radius) {
   // Trục địa lý = trục Y cục bộ của earthTiltGroup (nhóm này đã nghiêng 23,5°)
   const axisDirection = new THREE.Vector3(0, 1, 0);
   const axisLength = radius * 1.48;
   const axisStart = axisDirection.clone().multiplyScalar(-axisLength);
   const axisEnd = axisDirection.clone().multiplyScalar(axisLength);
-  addLine(earthTiltGroup, [axisStart, axisEnd], 0xffd27a, 0.95);
+  trackDetail(addLine(earthTiltGroup, [axisStart, axisEnd], 0xffd27a, 0.95));
 
   const north = makeLabel("Cực Bắc", true);
   north.position.copy(axisEnd).multiplyScalar(1.12);
   earthTiltGroup.add(north);
+  trackDetail(north);
 
   const south = makeLabel("Cực Nam", true);
   south.position.copy(axisStart).multiplyScalar(1.12);
   earthTiltGroup.add(south);
+  trackDetail(south);
 
   const axisLabel = makeLabel("Trục Trái Đất");
   axisLabel.position.copy(axisEnd).multiplyScalar(1.42).add(new THREE.Vector3(0.22, 0.05, 0));
   earthTiltGroup.add(axisLabel);
+  trackDetail(axisLabel);
 
   // Xích đạo: vòng tròn nằm trong mặt phẳng XZ của nhóm nghiêng (vuông góc trục)
+  // -> LUÔN HIỆN (cả khi bật Mặt Trời)
   const equatorPoints = [];
   for (let i = 0; i <= 128; i++) {
     const a = (i / 128) * Math.PI * 2;
@@ -311,7 +334,7 @@ function addEarthAnnotations(radius) {
   }
   addLine(earthTiltGroup, equatorPoints, 0x8bd8ff, 0.9);
 
-  // Nhãn xích đạo đặt ngay phía trước (hướng camera) trên đường xích đạo
+  // Nhãn xích đạo đặt ngay phía trước (hướng camera) trên đường xích đạo -> LUÔN HIỆN
   const equatorLabel = makeLabel("Đường Xích đạo");
   equatorLabel.position.set(0, 0, radius * 1.4);
   earthTiltGroup.add(equatorLabel);
@@ -320,18 +343,94 @@ function addEarthAnnotations(radius) {
   const west = makeLabel("Hướng Tây");
   west.position.set(-radius * 1.45, -radius * 0.45, radius * 0.2);
   earthPivot.add(west);
+  trackDetail(west);
 
   const east = makeLabel("Hướng Đông");
   east.position.set(radius * 1.45, -radius * 0.45, radius * 0.2);
   earthPivot.add(east);
+  trackDetail(east);
 
   const angle1 = makeLabel("23°27′", true);
   angle1.position.set(radius * 0.8, radius * 1.25, radius * 0.05);
   earthPivot.add(angle1);
+  trackDetail(angle1);
+
+  // ==========================================
+  // MẶT PHẲNG QUỸ ĐẠO (mặt phẳng giả tưởng) NẰM DƯỚI TRỤC
+  // Đặt ở độ cao sao cho đầu cực Nam của trục chạm đúng mặt phẳng,
+  // góc giữa trục và mặt phẳng là 66°33′ (giống hình minh hoạ).
+  // ==========================================
+  const planeY = -axisLength * Math.cos(EARTH_TILT);
+  const planeRadius = radius * 2.2;
+
+  const planeMesh = new THREE.Mesh(
+    new THREE.CircleGeometry(planeRadius, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0xff8a3d,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    })
+  );
+  planeMesh.rotation.x = -Math.PI / 2;
+  planeMesh.position.y = planeY;
+  earthPivot.add(planeMesh);
+  trackDetail(planeMesh);
+
+  const addPlaneRing = (ringRadius, opacity) => {
+    const pts = [];
+    for (let i = 0; i < 128; i++) {
+      const a = (i / 128) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * ringRadius, 0, Math.sin(a) * ringRadius));
+    }
+    const ring = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0xff9a4d, transparent: true, opacity })
+    );
+    ring.position.y = planeY;
+    earthPivot.add(ring);
+    trackDetail(ring);
+  };
+  addPlaneRing(planeRadius, 0.9);        // viền ngoài
+  addPlaneRing(planeRadius * 0.5, 0.3);  // vòng mờ bên trong cho dễ nhìn chiều sâu
+
+  const planeLabel = makeLabel("Mặt phẳng quỹ đạo");
+  planeLabel.position.set(planeRadius * 0.5, planeY, planeRadius * 0.75);
+  earthPivot.add(planeLabel);
+  trackDetail(planeLabel);
+
+  // Cung góc 66°33′ tại điểm trục chạm mặt phẳng
+  const touch = new THREE.Vector3(-axisLength * Math.sin(EARTH_TILT), planeY, 0);
+  const arcAngle = Math.PI / 2 - EARTH_TILT; // 66,5°
+  const arcRadius = radius * 0.35;
+  const arcPoints = [];
+  for (let i = 0; i <= 32; i++) {
+    const a = arcAngle * (i / 32);
+    arcPoints.push(new THREE.Vector3(
+      touch.x + Math.cos(a) * arcRadius,
+      touch.y + Math.sin(a) * arcRadius,
+      0
+    ));
+  }
+  trackDetail(addLine(earthPivot, arcPoints, 0xffd27a, 0.95));
 
   const angle2 = makeLabel("66°33′", true);
-  angle2.position.set(-radius * 0.95, -radius * 1.23, radius * 0.05);
+  const labelAngle = THREE.MathUtils.degToRad(12);
+  angle2.position.set(
+    touch.x + Math.cos(labelAngle) * radius * 0.78,
+    touch.y + Math.sin(labelAngle) * radius * 0.78,
+    0
+  );
   earthPivot.add(angle2);
+  trackDetail(angle2);
+
+  // Tên "Trái Đất": chỉ hiện khi bật Mặt Trời (lúc đó các chú thích khác được ẩn)
+  earthNameLabel = makeLabel("Trái Đất", true);
+  earthNameLabel.position.set(0, radius * 1.45, 0);
+  earthPivot.add(earthNameLabel);
+
+  updateEarthDetailVisibility();
 }
 
 function setSunVisible(visible) {
@@ -340,6 +439,7 @@ function setSunVisible(visible) {
   sunLight.visible = visible;
   sunGlow.intensity = visible ? 2.5 : 0;
   orbitLine.visible = visible;
+  updateEarthDetailVisibility(); // bật Mặt Trời: ẩn chú thích, chỉ còn tên Trái Đất + xích đạo
   orbitLabel.visible = visible; // nhãn CSS2D không tự ẩn theo nhóm cha nên phải đặt riêng
 
   startTransition(); // Kích hoạt hiệu ứng chuyển cảnh mượt (có thể bị huỷ khi người dùng kéo chuột)
@@ -489,6 +589,14 @@ async function loadModels() {
 }
 
 sunToggle.addEventListener("click", () => setSunVisible(!isSunVisible));
+
+function setMoonVisible(visible) {
+  isMoonVisible = visible;
+  moonOrbitPivot.visible = visible;
+  if (moonToggle) moonToggle.setAttribute("aria-pressed", String(visible));
+  if (moonButtonTitle) moonButtonTitle.textContent = visible ? "Ẩn Mặt Trăng" : "Hiện Mặt Trăng";
+}
+if (moonToggle) moonToggle.addEventListener("click", () => setMoonVisible(!isMoonVisible));
 pauseButton.addEventListener("click", () => {
   isPaused = !isPaused;
   pauseButton.textContent = isPaused ? "Tiếp tục" : "Tạm dừng";
