@@ -34,10 +34,21 @@ sceneElement.appendChild(labelRenderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.055;
-controls.minDistance = 6;
-controls.maxDistance = 55;
+controls.minDistance = 4;
+controls.maxDistance = 60;
 controls.target.set(0, 0, 0);
 controls.enablePan = false;
+
+// ✅ FIX: Người dùng cầm chuột / chạm / lăn chuột => HUỶ hiệu ứng chuyển cảnh ngay,
+// để camera không bị lerp kéo ngược về vị trí cũ nữa.
+controls.addEventListener("start", () => {
+  isTransitioning = false;
+});
+
+function startTransition() {
+  transitionTime = 0;
+  isTransitioning = true;
+}
 
 // ==========================================
 // 🌌 NỀN VŨ TRỤ VỚI CÁC NGÔI SAO LẤP LÁNH
@@ -124,14 +135,15 @@ let isSunVisible = false;
 let isPaused = false;
 let earthRadius = 1.8;
 
-// Biến quản lý Morphing chuyển cảnh mượt
+// Biến quản lý Morphing mượt mà
 let isTransitioning = false;
+let transitionTime = 0;
+const TRANSITION_MAX_TIME = 2.5; // giây - quá thời gian này tự trả quyền cho chuột
 let targetCameraPosition = new THREE.Vector3(0, 1.5, 12.0);
 let targetControlsTarget = new THREE.Vector3(0, 0, 0);
 let targetEarthPosition = new THREE.Vector3(0, 0, 0);
 let targetAmbientIntensity = 1.2;
 let targetFillIntensity = 0.9;
-let targetOrbitRotationY = 0;
 
 let earthOriginalMaterials = new Map();
 let moonOriginalMaterials = new Map();
@@ -225,22 +237,21 @@ function setSunVisible(visible) {
   sunLight.visible = visible;
   sunGlow.intensity = visible ? 2.5 : 0;
 
-  isTransitioning = true; // Bắt đầu kích hoạt hiệu ứng chuyển cảnh mượt
+  startTransition(); // Kích hoạt hiệu ứng chuyển cảnh mượt (có thể bị huỷ khi người dùng kéo chuột)
 
   if (visible) {
     targetEarthPosition.set(EARTH_SUN_DISTANCE, 0, 0);
     targetCameraPosition.set(0, 5.0, 32.0);
-    targetControlsTarget.set(0, 0, 0);
+    targetControlsTarget.set(0, 0, 0); // Nhìn về tâm Mặt Trời
     targetAmbientIntensity = 0.35;
     targetFillIntensity = 0.25;
   } else {
     targetEarthPosition.set(0, 0, 0);
     earthOrbitGroup.rotation.y = 0;
     targetCameraPosition.set(0, 1.5, 12.0);
-    targetControlsTarget.set(0, 0, 0);
+    targetControlsTarget.set(0, 0, 0); // Nhìn về tâm Trái Đất
     targetAmbientIntensity = 1.2;
     targetFillIntensity = 0.9;
-    targetOrbitRotationY = 0;
   }
 
   // Đổi Material theo trạng thái
@@ -384,7 +395,7 @@ resetButton.addEventListener("click", () => {
     targetCameraPosition.set(0, 1.5, 12.0);
   }
   targetControlsTarget.set(0, 0, 0);
-  isTransitioning = true;
+  startTransition();
 });
 
 function resize() {
@@ -420,24 +431,29 @@ function animate() {
       sunLight.position.copy(sunPivot.position);
       sunLight.target.position.copy(earthPivot.localToWorld(new THREE.Vector3(0, 0, 0)));
       sunLight.target.updateMatrixWorld();
-    } else {
-      earthOrbitGroup.rotation.y = THREE.MathUtils.lerp(earthOrbitGroup.rotation.y, targetOrbitRotationY, 0.05);
     }
 
     if (sunModel) sunModel.rotation.y += delta * 0.10;
   }
 
-  // 3. HIỆU ỨNG MORPHING MƯỢT MÀ (CHỈ CHẠY KHI ĐANG CHUYỂN ĐỔI, SAU ĐÓ TỰ DỪNG ĐỂ BẠN TỰ DO XOAY CHUỘT)
+  // 3. HIỆU ỨNG MORPHING VỊ TRÍ TRÁI ĐẤT & ÁNH SÁNG
   earthPivot.position.lerp(targetEarthPosition, 0.05);
   ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbientIntensity, 0.05);
   fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, targetFillIntensity, 0.05);
 
+  // 4. LƯỚT CAMERA VÀ TÂM XOAY TRONG QUÁ TRÌNH CHUYỂN CẢNH (SAU ĐÓ TỰ DO HOÀN TOÀN)
   if (isTransitioning) {
-    camera.position.lerp(targetCameraPosition, 0.05);
-    controls.target.lerp(targetControlsTarget, 0.05);
+    transitionTime += delta;
+    const k = 1 - Math.pow(1 - 0.05, delta * 60); // độc lập với FPS
+    camera.position.lerp(targetCameraPosition, k);
+    controls.target.lerp(targetControlsTarget, k);
 
-    // Khi camera đã đến gần đích, tắt cờ chuyển cảnh để trả lại quyền điều khiển hoàn toàn cho chuột
-    if (camera.position.distanceTo(targetCameraPosition) < 0.1) {
+    const arrived =
+      camera.position.distanceTo(targetCameraPosition) < 0.05 &&
+      controls.target.distanceTo(targetControlsTarget) < 0.05;
+
+    // Đến nơi HOẶC quá thời gian => tắt hẳn, không bao giờ bị kẹt ở true
+    if (arrived || transitionTime > TRANSITION_MAX_TIME) {
       isTransitioning = false;
     }
   }
