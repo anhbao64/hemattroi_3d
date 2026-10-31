@@ -15,7 +15,7 @@ const stageCaption = document.getElementById("stageCaption");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050914);
 
-const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 camera.position.set(0, 1.5, 12.0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -51,41 +51,104 @@ function startTransition() {
 }
 
 // ==========================================
-// 🌌 NỀN VŨ TRỤ VỚI CÁC NGÔI SAO LẤP LÁNH
+// 🌌 NỀN VŨ TRỤ: RẤT NHIỀU SAO, MỖI SAO LẤP LÁNH RIÊNG
 // ==========================================
-let starMaterial;
+const starUniforms = {
+  uTime: { value: 0 },
+  uPixelRatio: { value: renderer.getPixelRatio() }
+};
+
 function createStarfield() {
-  const starsCount = 1200;
-  const geometry = new THREE.BufferGeometry();
+  const starsCount = 7000; // tăng/giảm số này để sao dày/thưa hơn
   const positions = new Float32Array(starsCount * 3);
   const colors = new Float32Array(starsCount * 3);
+  const sizes = new Float32Array(starsCount);
+  const phases = new Float32Array(starsCount);
+  const speeds = new Float32Array(starsCount);
+  const amps = new Float32Array(starsCount);
+
+  // Màu sao: xanh lam, trắng, vàng nhạt, cam nhạt (trắng chiếm nhiều hơn)
+  const tints = [
+    [0.70, 0.80, 1.00],
+    [1.00, 1.00, 1.00],
+    [1.00, 1.00, 1.00],
+    [1.00, 0.95, 0.80],
+    [1.00, 0.80, 0.60]
+  ];
 
   for (let i = 0; i < starsCount; i++) {
-    const r = 40 + Math.random() * 50;
+    // Sao nằm trên mặt cầu rất lớn, bao quanh toàn bộ khu vực camera có thể tới
+    const r = 150 + Math.random() * 150;
     const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos((Math.random() * 2) - 1);
+    const phi = Math.acos(Math.random() * 2 - 1);
 
     positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
     positions[i * 3 + 2] = r * Math.cos(phi);
 
-    const brightness = 0.5 + Math.random() * 0.5;
-    colors[i * 3] = brightness;
-    colors[i * 3 + 1] = brightness * (0.85 + Math.random() * 0.15);
-    colors[i * 3 + 2] = brightness;
+    const tint = tints[Math.floor(Math.random() * tints.length)];
+    const brightness = 0.45 + Math.random() * 0.55;
+    colors[i * 3] = tint[0] * brightness;
+    colors[i * 3 + 1] = tint[1] * brightness;
+    colors[i * 3 + 2] = tint[2] * brightness;
+
+    // Phần lớn là sao nhỏ, một ít sao vừa, rất ít sao lớn và sáng
+    const roll = Math.random();
+    sizes[i] = roll > 0.97 ? 4.5 + Math.random() * 2.0
+             : roll > 0.85 ? 2.8 + Math.random() * 1.2
+             : 1.6 + Math.random() * 1.0;
+
+    phases[i] = Math.random() * Math.PI * 2; // mỗi sao lệch pha => không nháy cùng lúc
+    speeds[i] = 0.8 + Math.random() * 3.2;   // tốc độ nhấp nháy khác nhau
+    amps[i] = 0.25 + Math.random() * 0.7;    // biên độ nhấp nháy khác nhau
   }
 
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
+  geometry.setAttribute("aAmp", new THREE.BufferAttribute(amps, 1));
 
-  starMaterial = new THREE.PointsMaterial({
-    size: 0.11,
-    vertexColors: true,
+  const material = new THREE.ShaderMaterial({
+    uniforms: starUniforms,
     transparent: true,
-    opacity: 0.8
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uPixelRatio;
+      attribute vec3 aColor;
+      attribute float aSize;
+      attribute float aPhase;
+      attribute float aSpeed;
+      attribute float aAmp;
+      varying vec3 vColor;
+      varying float vTwinkle;
+      void main() {
+        float wave = 0.5 + 0.5 * sin(uTime * aSpeed + aPhase);
+        wave *= 0.75 + 0.25 * sin(uTime * aSpeed * 2.7 + aPhase * 1.7); // nhấp nháy không đều
+        vTwinkle = 1.0 - aAmp * (1.0 - wave);
+        vColor = aColor;
+        gl_PointSize = aSize * uPixelRatio * (0.8 + 0.4 * vTwinkle);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vTwinkle;
+      void main() {
+        float d = length(gl_PointCoord - vec2(0.5));
+        if (d > 0.5) discard;
+        float core = smoothstep(0.5, 0.0, d);
+        gl_FragColor = vec4(vColor * vTwinkle, core * core);
+      }
+    `
   });
 
-  const starField = new THREE.Points(geometry, starMaterial);
+  const starField = new THREE.Points(geometry, material);
+  starField.frustumCulled = false;
   scene.add(starField);
 }
 createStarfield();
@@ -104,10 +167,48 @@ scene.add(earthOrbitGroup);
 // Hằng số khoảng cách
 const EARTH_SUN_DISTANCE = -15.0; 
 
+
+// ==========================================
+// 🪐 ĐƯỜNG QUỸ ĐẠO CỦA TRÁI ĐẤT QUANH MẶT TRỜI
+// Tâm là Mặt Trời (0,0,0), bán kính đúng bằng khoảng cách Trái Đất - Mặt Trời,
+// nên Trái Đất luôn chạy đúng trên đường này. Chỉ hiện khi bật Mặt Trời.
+// ==========================================
+const EARTH_ORBIT_RADIUS = Math.abs(EARTH_SUN_DISTANCE);
+
+const orbitLine = (() => {
+  const segments = 256;
+  const points = [];
+  for (let i = 0; i < segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    points.push(new THREE.Vector3(
+      Math.cos(a) * EARTH_ORBIT_RADIUS,
+      0,
+      Math.sin(a) * EARTH_ORBIT_RADIUS
+    ));
+  }
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.6 });
+  const line = new THREE.LineLoop(geometry, material);
+  line.visible = false;
+  scene.add(line);
+  return line;
+})();
+
+const orbitLabel = makeLabel("Quỹ đạo Trái Đất", true);
+orbitLabel.position.set(0, 0, -EARTH_ORBIT_RADIUS); // phía xa của quỹ đạo, tránh đè lên Trái Đất
+orbitLabel.visible = false;
+scene.add(orbitLabel);
 // Nhóm Trái Đất
 const earthPivot = new THREE.Group();
 earthPivot.position.set(0, 0, 0);
 earthOrbitGroup.add(earthPivot);
+
+// Nhóm NGHIÊNG: mô hình Trái Đất + trục + xích đạo đều nằm trong nhóm này.
+// Nhờ vậy xích đạo trùng khít với xích đạo của mô hình và đứng yên khi Trái Đất tự quay.
+const EARTH_TILT = THREE.MathUtils.degToRad(23.5);
+const earthTiltGroup = new THREE.Group();
+earthTiltGroup.rotation.z = -EARTH_TILT; // cực Bắc nghiêng về phía +X
+earthPivot.add(earthTiltGroup);
 
 // Nhóm quay của Mặt Trăng quanh Trái Đất
 const moonOrbitPivot = new THREE.Group();
@@ -179,41 +280,43 @@ function addLine(parent, points, color = 0xffd27a, opacity = 0.9) {
 }
 
 function addEarthAnnotations(radius) {
-  const tilt = THREE.MathUtils.degToRad(23.5);
-  const axisDirection = new THREE.Vector3(Math.sin(tilt), Math.cos(tilt), 0).normalize();
+  // Trục địa lý = trục Y cục bộ của earthTiltGroup (nhóm này đã nghiêng 23,5°)
+  const axisDirection = new THREE.Vector3(0, 1, 0);
   const axisLength = radius * 1.48;
   const axisStart = axisDirection.clone().multiplyScalar(-axisLength);
   const axisEnd = axisDirection.clone().multiplyScalar(axisLength);
-  addLine(earthPivot, [axisStart, axisEnd], 0xffd27a, 0.95);
+  addLine(earthTiltGroup, [axisStart, axisEnd], 0xffd27a, 0.95);
 
   const north = makeLabel("Cực Bắc", true);
-  north.position.copy(axisEnd.clone().multiplyScalar(1.12));
-  earthPivot.add(north);
+  north.position.copy(axisEnd).multiplyScalar(1.12);
+  earthTiltGroup.add(north);
 
   const south = makeLabel("Cực Nam", true);
-  south.position.copy(axisStart.clone().multiplyScalar(1.12));
-  earthPivot.add(south);
+  south.position.copy(axisStart).multiplyScalar(1.12);
+  earthTiltGroup.add(south);
 
   const axisLabel = makeLabel("Trục Trái Đất");
-  axisLabel.position.copy(axisEnd.clone().multiplyScalar(1.42)).add(new THREE.Vector3(0.22, 0.05, 0));
-  earthPivot.add(axisLabel);
+  axisLabel.position.copy(axisEnd).multiplyScalar(1.42).add(new THREE.Vector3(0.22, 0.05, 0));
+  earthTiltGroup.add(axisLabel);
 
+  // Xích đạo: vòng tròn nằm trong mặt phẳng XZ của nhóm nghiêng (vuông góc trục)
   const equatorPoints = [];
-  const u = new THREE.Vector3(1, 0, 0);
-  if (Math.abs(u.dot(axisDirection)) > 0.92) u.set(0, 0, 1);
-  u.cross(axisDirection).normalize();
-  const v = axisDirection.clone().cross(u).normalize();
   for (let i = 0; i <= 128; i++) {
     const a = (i / 128) * Math.PI * 2;
-    equatorPoints.push(u.clone().multiplyScalar(Math.cos(a) * radius * 1.008)
-      .add(v.clone().multiplyScalar(Math.sin(a) * radius * 1.008)));
+    equatorPoints.push(new THREE.Vector3(
+      Math.cos(a) * radius * 1.008,
+      0,
+      Math.sin(a) * radius * 1.008
+    ));
   }
-  addLine(earthPivot, equatorPoints, 0x8bd8ff, 0x88);
+  addLine(earthTiltGroup, equatorPoints, 0x8bd8ff, 0.9);
 
+  // Nhãn xích đạo đặt ngay phía trước (hướng camera) trên đường xích đạo
   const equatorLabel = makeLabel("Đường Xích đạo");
-  equatorLabel.position.copy(u.clone().multiplyScalar(radius * 1.35).add(new THREE.Vector3(0, -0.2, 0.2)));
-  earthPivot.add(equatorLabel);
+  equatorLabel.position.set(0, 0, radius * 1.4);
+  earthTiltGroup.add(equatorLabel);
 
+  // Các nhãn hướng và góc giữ nguyên vị trí cố định
   const west = makeLabel("Hướng Tây");
   west.position.set(-radius * 1.45, -radius * 0.45, radius * 0.2);
   earthPivot.add(west);
@@ -236,6 +339,8 @@ function setSunVisible(visible) {
   sunPivot.visible = visible;
   sunLight.visible = visible;
   sunGlow.intensity = visible ? 2.5 : 0;
+  orbitLine.visible = visible;
+  orbitLabel.visible = visible; // nhãn CSS2D không tự ẩn theo nhóm cha nên phải đặt riêng
 
   startTransition(); // Kích hoạt hiệu ứng chuyển cảnh mượt (có thể bị huỷ khi người dùng kéo chuột)
 
@@ -361,7 +466,7 @@ async function loadModels() {
       }
     });
 
-    earthPivot.add(earthModel);
+    earthTiltGroup.add(earthModel);
     sunPivot.add(sunModel);
 
     moonModel.position.set(2.8, 0, 0);
@@ -415,9 +520,7 @@ function animate() {
   const elapsedTime = clock.getElapsedTime();
 
   // 1. Sao lấp lánh nhẹ nhàng
-  if (starMaterial) {
-    starMaterial.opacity = 0.7 + Math.sin(elapsedTime * 2.5) * 0.15;
-  }
+  starUniforms.uTime.value = elapsedTime;
   
   // 2. Chuyển động xoay của các vật thể
   if (!isPaused) {
@@ -437,6 +540,9 @@ function animate() {
   }
 
   // 3. HIỆU ỨNG MORPHING VỊ TRÍ TRÁI ĐẤT & ÁNH SÁNG
+  // Giữ hướng trục Trái Đất cố định trong không gian khi nó quay quanh Mặt Trời
+  // (nếu không, trục nghiêng sẽ bị quỹ đạo "xoay theo" và lắc lư)
+  earthPivot.rotation.y = -earthOrbitGroup.rotation.y;
   earthPivot.position.lerp(targetEarthPosition, 0.05);
   ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbientIntensity, 0.05);
   fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, targetFillIntensity, 0.05);
