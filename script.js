@@ -15,6 +15,16 @@ const moonButtonTitle = document.getElementById("moonButtonTitle");
 const solarToggle = document.getElementById("solarToggle");
 const solarButtonTitle = document.getElementById("solarButtonTitle");
 const solarButtonHint = document.getElementById("solarButtonHint");
+const hintText = document.getElementById("hintText");
+const planetCard = document.getElementById("planetCard");
+const planetKicker = document.getElementById("planetKicker");
+const planetName = document.getElementById("planetName");
+const planetSummary = document.getElementById("planetSummary");
+const planetDistance = document.getElementById("planetDistance");
+const planetPeriod = document.getElementById("planetPeriod");
+const planetSurface = document.getElementById("planetSurface");
+const planetBack = document.getElementById("planetBack");
+const planetClose = document.getElementById("planetClose");
 const stageCaption = document.getElementById("stageCaption");
 
 const scene = new THREE.Scene();
@@ -216,6 +226,10 @@ earthTiltGroup.rotation.z = -EARTH_TILT; // cực Bắc nghiêng về phía +X
 earthPivot.add(earthTiltGroup);
 
 // Nhóm quay của Mặt Trăng quanh Trái Đất
+// Mặt Trăng LUÔN quay cùng một mặt về phía Trái Đất (khoá thuỷ triều):
+// mô hình không tự quay riêng, chỉ đi theo nhóm quỹ đạo nên một mặt luôn hướng vào Trái Đất.
+const MOON_ORBIT_SPEED = 0.08;   // rad/s - chu kỳ ~78 giây (trước đây 0.4). Chậm hơn Trái Đất tự quay (0.16 rad/s)
+const MOON_FACE_OFFSET = 0;      // xoay mô hình (rad) để đổi mặt hướng về Trái Đất, ví dụ Math.PI nếu thấy ngược mặt
 const moonOrbitPivot = new THREE.Group();
 earthPivot.add(moonOrbitPivot);
 moonOrbitPivot.visible = false; // Mặt Trăng ban đầu bị tắt
@@ -249,6 +263,59 @@ const PLANETS = [
   { key: "neptune", name: "Sao Hải Vương",  files: ["Neptune.glb"],                 radius: 2.65, gap: 9.0, speed: 0.04,  spin: 0.35,  angle: 0.2, color: 0x5a7be0 }
 ];
 const EARTH_PLANET = PLANETS.find((planet) => planet.isEarth);
+
+// Thông tin cơ bản hiện ra khi bấm vào hành tinh (tên riêng viết hoa)
+const PLANET_INFO = {
+  mercury: {
+    summary: "Hành tinh nhỏ nhất và nằm gần Mặt Trời nhất trong Hệ Mặt Trời.",
+    distance: "Khoảng 58 triệu km",
+    period: "88 ngày Trái Đất",
+    surface: "Bề mặt chi chít các hố va chạm, nhìn khá giống Mặt Trăng của Trái Đất; kèm theo các vách đá lớn hình thành do lõi hành tinh nguội đi và co lại."
+  },
+  venus: {
+    summary: "Hành tinh nóng nhất Hệ Mặt Trời, có kích thước gần bằng Trái Đất và quay quanh trục theo chiều ngược với đa số các hành tinh.",
+    distance: "Khoảng 108 triệu km",
+    period: "225 ngày Trái Đất",
+    surface: "Bề mặt có núi lửa, cao nguyên và đồng bằng dung nham, bị che khuất bởi lớp mây dày trong bầu khí quyển chủ yếu là khí cacbonic."
+  },
+  earth: {
+    summary: "Hành tinh duy nhất hiện được biết là có sự sống; khoảng 71% bề mặt được bao phủ bởi nước.",
+    distance: "Khoảng 150 triệu km",
+    period: "Khoảng 365,25 ngày (1 năm)",
+    surface: "Có đại dương, lục địa, núi và sa mạc; trục nghiêng 23°27′ tạo nên các mùa. Có một vệ tinh tự nhiên là Mặt Trăng."
+  },
+  mars: {
+    summary: "Hành tinh đỏ do bụi chứa oxit sắt, nhỏ thứ hai trong Hệ Mặt Trời (sau Sao Thủy).",
+    distance: "Khoảng 228 triệu km",
+    period: "687 ngày Trái Đất (khoảng 1,88 năm)",
+    surface: "Có Olympus Mons, ngọn núi lửa cao nhất Hệ Mặt Trời, và hẻm vực Valles Marineris dài hàng nghìn km; hai cực có băng."
+  },
+  jupiter: {
+    summary: "Hành tinh lớn nhất Hệ Mặt Trời, là hành tinh khí khổng lồ cấu tạo chủ yếu từ hydro và heli.",
+    distance: "Khoảng 778 triệu km",
+    period: "Khoảng 11,9 năm Trái Đất",
+    surface: "Không có bề mặt rắn; có các dải mây song song và Vết Đỏ Lớn, một cơn bão khổng lồ tồn tại từ nhiều thế kỷ."
+  },
+  saturn: {
+    summary: "Hành tinh lớn thứ hai trong Hệ Mặt Trời, nổi tiếng với hệ vành đai rộng lớn.",
+    distance: "Khoảng 1,43 tỉ km",
+    period: "Khoảng 29,5 năm Trái Đất",
+    surface: "Hành tinh khí, không có bề mặt rắn; vành đai gồm vô số hạt băng và đá, khối lượng riêng trung bình nhỏ hơn nước."
+  },
+  uranus: {
+    summary: "Hành tinh băng khổng lồ có trục quay nghiêng gần 98°, nên gần như quay \"nằm ngang\" trên quỹ đạo.",
+    distance: "Khoảng 2,87 tỉ km",
+    period: "Khoảng 84 năm Trái Đất",
+    surface: "Không có bề mặt rắn; khí quyển chứa hydro, heli và metan làm hành tinh có màu xanh lơ, xung quanh có hệ vành đai mảnh."
+  },
+  neptune: {
+    summary: "Hành tinh xa Mặt Trời nhất trong Hệ Mặt Trời, là hành tinh băng khổng lồ có gió mạnh nhất.",
+    distance: "Khoảng 4,5 tỉ km",
+    period: "Khoảng 165 năm Trái Đất",
+    surface: "Không có bề mặt rắn; khí quyển chứa metan nên có màu xanh lam đậm, xuất hiện các cơn bão lớn và gió có thể vượt 2.000 km/h."
+  }
+};
+PLANETS.forEach((planet) => { planet.info = PLANET_INFO[planet.key]; });
 let solarMaxRadius = 0;
 
 // Bố cục: quỹ đạo sau = quỹ đạo trước + bán kính vật trước + KHOẢNG TRỐNG + bán kính của chính nó.
@@ -368,7 +435,7 @@ function trackDetail(object) {
 
 function updateEarthDetailVisibility() {
   earthDetailObjects.forEach((object) => { object.visible = !isSunVisible; });
-  if (earthNameLabel) earthNameLabel.visible = isSunVisible;
+  if (earthNameLabel) earthNameLabel.visible = isSunVisible && focusedBody !== earthBody;
   if (equatorLabelObject) equatorLabelObject.visible = !isSolarSystemVisible; // xem cả hệ: bỏ chữ "Đường Xích đạo" cho đỡ rối
 }
 
@@ -512,6 +579,7 @@ function addEarthAnnotations(radius) {
 // 🎬 CHUYỂN CHẾ ĐỘ XEM: "earth" (chỉ Trái Đất) · "sun" (Trái Đất + Mặt Trời) · "solar" (cả Hệ Mặt Trời)
 // ==========================================
 function applyViewMode(mode) {
+  resetFocusSilently(); // đổi chế độ => thoát chế độ xem riêng một hành tinh
   viewMode = mode;
   const sunOn = mode !== "earth";
   const solarOn = mode === "solar";
@@ -570,11 +638,7 @@ function applyViewMode(mode) {
   sunButtonTitle.textContent = sunOn ? "Ẩn Mặt Trời" : "Hiện Mặt Trời";
   if (solarToggle) solarToggle.setAttribute("aria-pressed", String(solarOn));
   if (solarButtonTitle) solarButtonTitle.textContent = solarOn ? "Ẩn Hệ Mặt Trời" : "Hiện Hệ Mặt Trời";
-  stageCaption.textContent = {
-    earth: "Trái Đất là trung tâm · Đang tự quay quanh trục",
-    sun: "Mặt Trời xuất hiện · Trái Đất quay trên quỹ đạo quanh Mặt Trời",
-    solar: "Hệ Mặt Trời · 8 hành tinh chuyển động trên quỹ đạo riêng, không bao giờ chạm nhau"
-  }[mode];
+  refreshCaption();
 }
 
 function setSunVisible(visible) {
@@ -718,7 +782,16 @@ async function buildSolarSystem() {
 
     const ring = makeOrbitRing(planet.orbitRadius);
     solarGroup.add(pivot, ring);
-    solarPlanets.push({ def: planet, pivot, spin, ring, label, angle: planet.angle });
+    solarPlanets.push({
+      def: planet,
+      pivot,
+      spin,
+      ring,
+      label,
+      angle: planet.angle,
+      radius: planet.radius,
+      getWorldPosition(out) { return out.copy(this.pivot.position); } // nhóm hành tinh nằm sát gốc toạ độ nên vị trí = vị trí thế giới
+    });
   });
 }
 
@@ -793,9 +866,204 @@ function updateSolarSystem(delta, smooth) {
     item.pivot.position.set(Math.cos(item.angle) * r, 0, Math.sin(item.angle) * r);
     item.pivot.scale.setScalar(Math.max(g, 0.0001));
     item.ring.material.opacity = 0.35 * g;
-    setLabelFade(item.label, g);
+    setLabelFade(item.label, item === focusedBody ? 0 : g); // đang xem hành tinh nào thì ẩn nhãn của nó (đã có thẻ thông tin)
   });
 }
+
+// ==========================================
+// 🔭 BẤM VÀO HÀNH TINH: CHUYỂN CẢNH + THÔNG TIN CƠ BẢN
+// ==========================================
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+let focusedBody = null;
+const focusPos = new THREE.Vector3();
+const lastFocusPos = new THREE.Vector3();
+const focusOffset = new THREE.Vector3(); // vị trí camera so với hành tinh
+let focusDistance = 10;
+
+// Trái Đất cũng bấm được (không nằm trong solarPlanets vì có nhóm riêng)
+const earthBody = {
+  def: EARTH_PLANET,
+  radius: EARTH_DISPLAY_RADIUS,
+  getWorldPosition(out) { return earthPivot.getWorldPosition(out); },
+  get label() { return earthNameLabel; }
+};
+
+const CAPTIONS = {
+  earth: "Trái Đất là trung tâm · Đang tự quay quanh trục",
+  sun: "Mặt Trời xuất hiện · Trái Đất quay trên quỹ đạo quanh Mặt Trời",
+  solar: "Hệ Mặt Trời · 8 hành tinh chuyển động trên quỹ đạo riêng, không bao giờ chạm nhau"
+};
+const HINTS = {
+  default: "Kéo chuột để quan sát · Cuộn chuột để phóng to/thu nhỏ",
+  solar: "Bấm vào hành tinh để xem thông tin · Kéo chuột để xoay · Cuộn chuột để phóng to/thu nhỏ",
+  focus: "Kéo chuột để xoay quanh hành tinh · Cuộn chuột để phóng to/thu nhỏ · Esc để quay lại"
+};
+
+function refreshCaption() {
+  stageCaption.textContent = focusedBody
+    ? `Đang quan sát ${focusedBody.def.name} · hành tinh thứ ${PLANETS.indexOf(focusedBody.def) + 1} tính từ Mặt Trời`
+    : CAPTIONS[viewMode];
+  if (hintText) hintText.textContent = focusedBody ? HINTS.focus : (viewMode === "solar" ? HINTS.solar : HINTS.default);
+}
+
+function showPlanetCard(body) {
+  if (!planetCard) return;
+  const info = body.def.info;
+  planetKicker.textContent = `HÀNH TINH THỨ ${PLANETS.indexOf(body.def) + 1} TỪ MẶT TRỜI`;
+  planetName.textContent = body.def.name;
+  planetSummary.textContent = info.summary;
+  planetDistance.textContent = info.distance;
+  planetPeriod.textContent = info.period;
+  planetSurface.textContent = info.surface;
+  planetCard.hidden = false;
+  planetCard.scrollTop = 0;
+}
+
+// Màn hình hẹp (điện thoại): đẩy hành tinh lên cao một chút để thẻ thông tin không che
+function applyFocusViewShift() {
+  const w = sceneElement.clientWidth;
+  const h = sceneElement.clientHeight;
+  if (focusedBody && w <= 700) camera.setViewOffset(w, h, 0, h * 0.2, w, h);
+  else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+
+function resetFocusSilently() {
+  focusedBody = null;
+  if (planetCard) planetCard.hidden = true;
+  controls.minDistance = 4;
+  applyFocusViewShift();
+}
+
+function focusBody(body) {
+  focusedBody = body;
+  body.getWorldPosition(focusPos);
+  lastFocusPos.copy(focusPos);
+
+  // Camera đặt ở phía hướng về Mặt Trời, lệch 35° để thấy cả phần sáng lẫn phần tối của hành tinh
+  focusDistance = Math.max(body.radius * 6.5, 5.5);
+  const toSun = new THREE.Vector3(-focusPos.x, 0, -focusPos.z);
+  if (toSun.lengthSq() < 1e-6) toSun.set(0, 0, 1);
+  toSun.normalize();
+  const side = new THREE.Vector3().crossVectors(Y_AXIS, toSun);
+  const tilt = THREE.MathUtils.degToRad(35);
+  focusOffset.copy(toSun).multiplyScalar(Math.cos(tilt)).addScaledVector(side, Math.sin(tilt));
+  focusOffset.multiplyScalar(focusDistance);
+  focusOffset.y += focusDistance * 0.18;
+
+  controls.minDistance = Math.max(1.5, body.radius * 2.2);
+  showPlanetCard(body);
+  updateEarthDetailVisibility();
+  refreshCaption();
+  applyFocusViewShift();
+
+  targetControlsTarget.copy(focusPos);
+  targetCameraPosition.copy(focusPos).add(focusOffset);
+  startTransition(); // chuyển cảnh mượt giống lúc bật/tắt Mặt Trời
+}
+
+function exitFocus() {
+  if (!focusedBody) return;
+  resetFocusSilently();
+  updateEarthDetailVisibility();
+  refreshCaption();
+  targetCameraPosition.copy(getSolarCameraPosition());
+  targetControlsTarget.set(0, 0, 0);
+  startTransition();
+}
+
+// Mỗi khung hình: camera đi theo hành tinh đang chạy trên quỹ đạo
+function updateFocusFollow() {
+  if (!focusedBody) return;
+  focusedBody.getWorldPosition(focusPos);
+  const move = focusPos.clone().sub(lastFocusPos);
+  // Hành tinh vừa quay quanh Mặt Trời một góc `turn` (quanh trục Y)
+  const turn = Math.atan2(
+    lastFocusPos.z * focusPos.x - lastFocusPos.x * focusPos.z,
+    lastFocusPos.x * focusPos.x + lastFocusPos.z * focusPos.z
+  );
+  lastFocusPos.copy(focusPos);
+
+  // Quay góc nhìn theo cùng góc đó để luôn thấy đúng phía được Mặt Trời chiếu sáng
+  focusOffset.applyAxisAngle(Y_AXIS, turn);
+  const offset = camera.position.clone().sub(controls.target);
+  if (offset.length() < focusDistance * 3) offset.applyAxisAngle(Y_AXIS, turn);
+  controls.target.add(move);
+  camera.position.copy(controls.target).add(offset);
+
+  if (isTransitioning) {
+    targetControlsTarget.copy(focusPos);
+    targetCameraPosition.copy(focusPos).add(focusOffset);
+  }
+}
+
+// ---- Chọn hành tinh theo vị trí trên màn hình (hành tinh nhỏ vẫn dễ bấm) ----
+function getBodyScreenInfo(body, rect) {
+  const position = body.getWorldPosition(new THREE.Vector3());
+  const center = position.clone().project(camera);
+  if (center.z > 1) return null; // nằm sau camera
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const edge = position.clone().addScaledVector(right, body.radius).project(camera);
+  const sx = (center.x * 0.5 + 0.5) * rect.width;
+  const sy = (-center.y * 0.5 + 0.5) * rect.height;
+  const ex = (edge.x * 0.5 + 0.5) * rect.width;
+  return { sx, sy, radiusPx: Math.abs(ex - sx) };
+}
+
+function pickBodyAt(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+  let best = null;
+  let bestDistance = Infinity;
+  for (const body of [...solarPlanets, earthBody]) {
+    const info = getBodyScreenInfo(body, rect);
+    if (!info) continue;
+    const reach = Math.max(info.radiusPx, 10) + 10;
+    let distance = Math.hypot(px - info.sx, py - info.sy);
+    // Bấm vào nhãn tên cũng được
+    const label = body.label;
+    if (label && label.visible) {
+      const box = label.element.getBoundingClientRect();
+      if (clientX >= box.left - 4 && clientX <= box.right + 4 && clientY >= box.top - 4 && clientY <= box.bottom + 4) {
+        distance = 0;
+      }
+    }
+    if (distance <= reach && distance < bestDistance) {
+      best = body;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function canPickBodies() {
+  return viewMode === "solar" && solarProgress > 0.95 && solarPlanets.length > 0;
+}
+
+let pointerDownInfo = null;
+renderer.domElement.addEventListener("pointerdown", (event) => {
+  pointerDownInfo = { x: event.clientX, y: event.clientY, time: performance.now() };
+});
+renderer.domElement.addEventListener("pointerup", (event) => {
+  if (!pointerDownInfo) return;
+  const moved = Math.hypot(event.clientX - pointerDownInfo.x, event.clientY - pointerDownInfo.y);
+  const quick = performance.now() - pointerDownInfo.time < 500;
+  pointerDownInfo = null;
+  if (moved > 6 || !quick || !canPickBodies()) return; // kéo chuột để xoay thì không tính là bấm
+  const body = pickBodyAt(event.clientX, event.clientY);
+  if (body && body !== focusedBody) focusBody(body);
+});
+renderer.domElement.addEventListener("pointermove", (event) => {
+  if (event.buttons !== 0) return;
+  renderer.domElement.style.cursor = canPickBodies() && pickBodyAt(event.clientX, event.clientY) ? "pointer" : "";
+});
+
+if (planetBack) planetBack.addEventListener("click", exitFocus);
+if (planetClose) planetClose.addEventListener("click", exitFocus);
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") exitFocus();
+});
 
 async function loadModels() {
   const loader = new GLTFLoader();
@@ -861,8 +1129,12 @@ async function loadModels() {
     earthTiltGroup.add(earthModel);
     sunPivot.add(sunModel);
 
-    moonModel.position.set(2.8, 0, 0);
-    moonOrbitPivot.add(moonModel);
+    // Bọc trong một nhóm đặt cách Trái Đất 2.8 để giữ nguyên phần căn tâm của mô hình
+    const moonHolder = new THREE.Group();
+    moonHolder.position.set(2.8, 0, 0);
+    moonHolder.rotation.y = MOON_FACE_OFFSET;
+    moonHolder.add(moonModel);
+    moonOrbitPivot.add(moonHolder);
 
     addEarthAnnotations(earthRadius);
 
@@ -915,7 +1187,10 @@ pauseButton.addEventListener("click", () => {
   pauseButton.textContent = isPaused ? "Tiếp tục" : "Tạm dừng";
 });
 resetButton.addEventListener("click", () => {
-  if (viewMode === "solar") {
+  if (focusedBody) {
+    focusBody(focusedBody); // đặt lại góc nhìn quanh hành tinh đang xem
+    return;
+  } else if (viewMode === "solar") {
     targetCameraPosition.copy(getSolarCameraPosition());
   } else if (isSunVisible) {
     targetCameraPosition.set(0, 5.0, 32.0);
@@ -933,6 +1208,7 @@ function resize() {
   camera.updateProjectionMatrix();
   renderer.setSize(width, height);
   labelRenderer.setSize(width, height);
+  if (focusedBody) applyFocusViewShift();
 }
 window.addEventListener("resize", resize);
 resize();
@@ -949,9 +1225,9 @@ function animate() {
   // 2. Chuyển động xoay của các vật thể
   if (!isPaused) {
     if (earthModel) earthModel.rotation.y += delta * 0.16;
-    if (moonModel) moonModel.rotation.y += delta * 0.10;
+    // (Mặt Trăng không tự quay riêng - luôn hướng một mặt về Trái Đất)
     
-    moonOrbitPivot.rotation.y += delta * 0.4;
+    moonOrbitPivot.rotation.y += delta * MOON_ORBIT_SPEED;
 
     if (isSunVisible) {
       earthOrbitGroup.rotation.y += delta * 0.25;
@@ -976,6 +1252,8 @@ function animate() {
   updateSolarSystem(delta, smooth);
   ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbientIntensity, 0.05);
   fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, targetFillIntensity, 0.05);
+
+  updateFocusFollow(); // camera bám theo hành tinh đang xem
 
   // 4. LƯỚT CAMERA VÀ TÂM XOAY TRONG QUÁ TRÌNH CHUYỂN CẢNH (SAU ĐÓ TỰ DO HOÀN TOÀN)
   if (isTransitioning) {

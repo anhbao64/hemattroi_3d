@@ -46,7 +46,19 @@
         <span><i class="legend-dot day"></i> Khu vực được chiếu sáng</span>
         <span><i class="legend-dot night"></i> Khu vực ban đêm</span>
       </div>
-      <div class="hint">Kéo chuột để quan sát · Cuộn chuột để phóng to/thu nhỏ</div>
+      <div class="hint" id="hintText">Kéo chuột để quan sát · Cuộn chuột để phóng to/thu nhỏ</div>
+      <aside class="planet-card" id="planetCard" hidden aria-live="polite">
+        <button class="planet-close" id="planetClose" type="button" aria-label="Đóng thông tin">✕</button>
+        <p class="planet-kicker" id="planetKicker"></p>
+        <h3 id="planetName"></h3>
+        <p class="planet-summary" id="planetSummary"></p>
+        <dl class="planet-facts">
+          <div><dt>Khoảng cách tới Mặt Trời</dt><dd id="planetDistance"></dd></div>
+          <div><dt>Chu kỳ quỹ đạo</dt><dd id="planetPeriod"></dd></div>
+          <div><dt>Địa hình</dt><dd id="planetSurface"></dd></div>
+        </dl>
+        <button class="control-button planet-back" id="planetBack" type="button">← Quay lại Hệ Mặt Trời</button>
+      </aside>
     </section>
 
     <section class="control-row" aria-label="Điều khiển mô hình">
