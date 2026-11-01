@@ -53,6 +53,10 @@ h1 { margin:0; font-size:clamp(19px,3vw,27px); letter-spacing:-.6px; }
 .moon-button { background:linear-gradient(135deg,#232c3f,#171e2d); }
 .moon-button:hover { border-color:#9db3d9; }
 .moon-button .sun-symbol { color:#e4ecfb; background:#34425c; font-size:26px; }
+.solar-button { background:linear-gradient(135deg,#1c2f3b,#171e2d); }
+.solar-button:hover { border-color:#6fc3d9; }
+.solar-button .sun-symbol { color:#9fe3f5; background:#1f4452; font-size:26px; }
+.sun-button:disabled { opacity:.6; cursor:progress; transform:none; }
 .control-button { padding:10px 13px; border-radius:11px; background:#141e30; color:#c8d4e8; font-size:11px; }
 .control-button:hover { background:#202e46; border-color:#52688e; }
 .info-panel { padding:19px 21px 20px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
@@ -69,6 +73,7 @@ footer { padding:16px 3px 0; color:#697993; font-size:10px; text-align:center; }
   white-space:nowrap; text-shadow:0 1px 2px #000; pointer-events:none;
 }
 .label-tag.accent { color:#ffdc91; border-color:rgba(255,205,112,.45); }
+.planet-tag { margin-top:-14px; } /* nhãn tên hành tinh nằm hơi cao hơn mép hành tinh */
 @media (max-width:700px) {
   .app { width:calc(100% - 20px); padding-top:14px; }
   .top-note { display:none; }
