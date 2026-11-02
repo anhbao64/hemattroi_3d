@@ -52,11 +52,7 @@
         <p class="planet-kicker" id="planetKicker"></p>
         <h3 id="planetName"></h3>
         <p class="planet-summary" id="planetSummary"></p>
-        <dl class="planet-facts">
-          <div><dt>Khoảng cách tới Mặt Trời</dt><dd id="planetDistance"></dd></div>
-          <div><dt>Chu kỳ quỹ đạo</dt><dd id="planetPeriod"></dd></div>
-          <div><dt>Địa hình</dt><dd id="planetSurface"></dd></div>
-        </dl>
+        <dl class="planet-facts" id="planetFacts"></dl>
         <button class="control-button planet-back" id="planetBack" type="button">← Quay lại Hệ Mặt Trời</button>
       </aside>
     </section>
@@ -77,6 +73,17 @@
         </button>
       </div>
       <div class="controls-right">
+        <div class="speed-group" role="group" aria-label="Tốc độ mô phỏng">
+          <div class="speed-row">
+            <span class="speed-label">Tốc độ</span>
+            <button class="speed-button is-active" type="button" data-speed="1" aria-pressed="true">x1</button>
+            <button class="speed-button" type="button" data-speed="2" aria-pressed="false">x2</button>
+            <button class="speed-button" type="button" data-speed="4" aria-pressed="false">x4</button>
+            <button class="speed-button" type="button" data-speed="6" aria-pressed="false">x6</button>
+            <button class="speed-button" type="button" data-speed="8" aria-pressed="false">x8</button>
+          </div>
+          <small class="speed-readout" id="speedReadout"></small>
+        </div>
         <button id="pauseButton" class="control-button" type="button">Tạm dừng</button>
         <button id="resetButton" class="control-button" type="button">Đặt lại góc nhìn</button>
       </div>

@@ -20,9 +20,9 @@ const planetCard = document.getElementById("planetCard");
 const planetKicker = document.getElementById("planetKicker");
 const planetName = document.getElementById("planetName");
 const planetSummary = document.getElementById("planetSummary");
-const planetDistance = document.getElementById("planetDistance");
-const planetPeriod = document.getElementById("planetPeriod");
-const planetSurface = document.getElementById("planetSurface");
+const planetFacts = document.getElementById("planetFacts");
+const speedButtons = document.querySelectorAll(".speed-button");
+const speedReadout = document.getElementById("speedReadout");
 const planetBack = document.getElementById("planetBack");
 const planetClose = document.getElementById("planetClose");
 const stageCaption = document.getElementById("stageCaption");
@@ -225,10 +225,15 @@ const earthTiltGroup = new THREE.Group();
 earthTiltGroup.rotation.z = -EARTH_TILT; // cực Bắc nghiêng về phía +X
 earthPivot.add(earthTiltGroup);
 
+// Nhóm tự quay của Trái Đất: xoay quanh đúng trục địa lý (trục Y của nhóm nghiêng)
+const earthSpin = new THREE.Group();
+earthTiltGroup.add(earthSpin);
+
 // Nhóm quay của Mặt Trăng quanh Trái Đất
 // Mặt Trăng LUÔN quay cùng một mặt về phía Trái Đất (khoá thuỷ triều):
 // mô hình không tự quay riêng, chỉ đi theo nhóm quỹ đạo nên một mặt luôn hướng vào Trái Đất.
-const MOON_ORBIT_SPEED = 0.08;   // rad/s - chu kỳ ~78 giây (trước đây 0.4). Chậm hơn Trái Đất tự quay (0.16 rad/s)
+const MOON_ORBIT_SECONDS = 210;  // chu kỳ Mặt Trăng quanh Trái Đất ở tốc độ x1 (xem phần ĐỒNG HỒ MÔ PHỎNG bên dưới)
+const MOON_ORBIT_SPEED = (Math.PI * 2) / MOON_ORBIT_SECONDS; // rad/s
 const MOON_FACE_OFFSET = 0;      // xoay mô hình (rad) để đổi mặt hướng về Trái Đất, ví dụ Math.PI nếu thấy ngược mặt
 const moonOrbitPivot = new THREE.Group();
 earthPivot.add(moonOrbitPivot);
@@ -239,6 +244,11 @@ const sunPivot = new THREE.Group();
 sunPivot.position.set(0, 0, 0);
 scene.add(sunPivot);
 
+// Nhóm tự quay: xoay quanh ĐÚNG tâm Mặt Trời (mô hình được căn tâm về gốc bên trong nhóm này),
+// nên Mặt Trời luôn quay tại chỗ, không bị "đảo vòng" dù tâm hình học của mô hình có lệch gốc riêng.
+const sunSpin = new THREE.Group();
+sunPivot.add(sunSpin);
+
 // ==========================================
 // 🪐 HỆ MẶT TRỜI: MẶT TRỜI + 8 HÀNH TINH
 // ==========================================
@@ -247,20 +257,50 @@ const SOLAR_SUN_RADIUS = 7.0;                          // bán kính Mặt Trờ
 const SOLAR_SUN_SCALE = SOLAR_SUN_RADIUS / SUN_BASE_RADIUS;
 const EARTH_DISPLAY_RADIUS = 1.725;                    // = 3.45 / 2 (kích thước Trái Đất đang dùng)
 
+// ==========================================
+// ⏱️ ĐỒNG HỒ MÔ PHỎNG CHUNG (mọi chuyển động đều chạy theo cùng một đồng hồ)
+// ==========================================
+// Trong mỗi nhóm chuyển động, TỈ LỆ GIỮA CÁC HÀNH TINH ĐÚNG THEO SỐ LIỆU THẬT:
+//  - Quỹ đạo quanh Mặt Trời: lấy chu kỳ thật (ngày Trái Đất) so với 1 năm của Trái Đất.
+//  - Tự quay quanh trục:     lấy chu kỳ tự quay thật so với 1 ngày của Trái Đất (âm = quay ngược chiều).
+// Riêng tỉ lệ "1 ngày : 1 tháng : 1 năm" thật là 1 : 27 : 365 - không thể hiển thị cùng lúc
+// (Trái Đất sẽ quay vèo vèo) nên 3 mốc này được nén lại, nhưng vẫn giữ đúng THỨ TỰ: ngày < tháng < năm.
+const EARTH_YEAR_SECONDS = 400;      // 1 năm của Trái Đất (1 vòng quanh Mặt Trời) ở tốc độ x1
+const EARTH_DAY_SECONDS = 90;        // 1 ngày của Trái Đất (1 vòng tự quay) ở tốc độ x1
+const EARTH_ORBIT_DAYS = 365.256;
+const EARTH_ROTATION_DAYS = 0.99727;
+const SUN_DAY_SECONDS = 180;         // 1 vòng tự quay của Mặt Trời ở x1 (thật: ~25 ngày = chậm gấp 25 lần Trái Đất, quá chậm để nhìn thấy nên được nén lại)
+const ORBIT_PERIOD_EXPONENT = 1;     // 1 = đúng tỉ lệ thật. Đặt 0.5 để các hành tinh xa chạy nhanh hơn cho dễ nhìn (sẽ lệch số liệu)
+let timeScale = 1;                   // hệ số tốc độ do người dùng chọn (x1, x2, x4, x6, x8)
+
+// Tốc độ góc (rad/s) ở x1
+function orbitAngularSpeed(periodDays) {
+  const seconds = EARTH_YEAR_SECONDS * Math.pow(periodDays / EARTH_ORBIT_DAYS, ORBIT_PERIOD_EXPONENT);
+  return (Math.PI * 2) / seconds;
+}
+function spinAngularSpeed(rotationDays) {
+  const seconds = EARTH_DAY_SECONDS * (rotationDays / EARTH_ROTATION_DAYS); // âm => quay ngược
+  return (Math.PI * 2) / seconds;
+}
+const EARTH_ORBIT_SPEED = orbitAngularSpeed(EARTH_ORBIT_DAYS);
+const EARTH_SPIN_SPEED = spinAngularSpeed(EARTH_ROTATION_DAYS);
+const SUN_SPIN_SPEED = (Math.PI * 2) / SUN_DAY_SECONDS; // cùng chiều với Trái Đất; vẫn chậm hơn Trái Đất (90 giây) và nhanh hơn Sao Thủy như thật
+
 // Bảng hành tinh, xếp từ trong ra ngoài:
-//  radius : bán kính hiển thị (đã gồm cả vành đai nếu có) - dùng để chống va chạm
-//  gap    : khoảng trống TỐI THIỂU giữa mép hành tinh này và mép vật thể phía trong nó
-//  speed  : tốc độ chạy trên quỹ đạo (rad/s) - càng xa Mặt Trời càng chậm
-//  files  : tên tệp GLB trong thư mục model_3d (thử lần lượt từng tên)
+//  radius       : bán kính hiển thị (đã gồm cả vành đai nếu có) - dùng để chống va chạm
+//  gap          : khoảng trống TỐI THIỂU giữa mép hành tinh này và mép vật thể phía trong nó
+//  orbitDays    : chu kỳ quỹ đạo thật (ngày Trái Đất)
+//  rotationDays : chu kỳ tự quay thật (ngày Trái Đất), âm = quay ngược chiều
+//  files        : tên tệp GLB trong thư mục model_3d (thử lần lượt từng tên)
 const PLANETS = [
-  { key: "mercury", name: "Sao Thủy",       files: ["Mercury .glb", "Mercury.glb"], radius: 0.8,  gap: 7.0, speed: 0.55,  spin: 0.05,  angle: 0.9, color: 0xb5b5b5 },
-  { key: "venus",   name: "Sao Kim",        files: ["Venus.glb"],                   radius: 1.6,  gap: 6.0, speed: 0.40,  spin: -0.04, angle: 3.9, color: 0xe6c27a },
-  { key: "earth",   name: "Trái Đất",       isEarth: true,                         radius: EARTH_DISPLAY_RADIUS, gap: 6.5, speed: 0.25 },
-  { key: "mars",    name: "Sao Hỏa",        files: ["Mars.glb"],                    radius: 1.2,  gap: 7.0, speed: 0.19,  spin: 0.30,  angle: 2.3, color: 0xc1583a },
-  { key: "jupiter", name: "Sao Mộc",        files: ["jupiter.glb", "Jupiter.glb"],  radius: 4.75, gap: 7.5, speed: 0.11,  spin: 0.60,  angle: 5.5, color: 0xd8b48a },
-  { key: "saturn",  name: "Sao Thổ",        files: ["Saturn.glb"],                  radius: 7.5,  radiusNoRing: 4.0, gap: 8.0, speed: 0.08, spin: 0.50, angle: 1.4, color: 0xe3cf9a },
-  { key: "uranus",  name: "Sao Thiên Vương", files: ["Uranus.glb"],                 radius: 2.75, gap: 8.5, speed: 0.055, spin: 0.35,  angle: 4.2, color: 0x9fdfe6 },
-  { key: "neptune", name: "Sao Hải Vương",  files: ["Neptune.glb"],                 radius: 2.65, gap: 9.0, speed: 0.04,  spin: 0.35,  angle: 0.2, color: 0x5a7be0 }
+  { key: "mercury", name: "Sao Thủy",        files: ["Mercury .glb", "Mercury.glb"], radius: 0.8,  gap: 7.0, orbitDays: 87.969,   rotationDays: 58.646,  angle: 0.9, color: 0xb5b5b5 },
+  { key: "venus",   name: "Sao Kim",         files: ["Venus.glb"],                   radius: 1.6,  gap: 6.0, orbitDays: 224.701,  rotationDays: -243.018, angle: 3.9, color: 0xe6c27a },
+  { key: "earth",   name: "Trái Đất",        isEarth: true,                         radius: EARTH_DISPLAY_RADIUS, gap: 6.5, orbitDays: EARTH_ORBIT_DAYS },
+  { key: "mars",    name: "Sao Hỏa",         files: ["Mars.glb"],                    radius: 1.2,  gap: 7.0, orbitDays: 686.980,  rotationDays: 1.02596, angle: 2.3, color: 0xc1583a },
+  { key: "jupiter", name: "Sao Mộc",         files: ["jupiter.glb", "Jupiter.glb"],  radius: 4.75, gap: 7.5, orbitDays: 4332.589, rotationDays: 0.41354, angle: 5.5, color: 0xd8b48a },
+  { key: "saturn",  name: "Sao Thổ",         files: ["Saturn.glb"],                  radius: 7.5,  radiusNoRing: 4.0, gap: 8.0, orbitDays: 10759.22, rotationDays: 0.44401, angle: 1.4, color: 0xe3cf9a },
+  { key: "uranus",  name: "Sao Thiên Vương", files: ["Uranus.glb"],                  radius: 2.75, gap: 8.5, orbitDays: 30688.5,  rotationDays: -0.71833, angle: 4.2, color: 0x9fdfe6 },
+  { key: "neptune", name: "Sao Hải Vương",   files: ["Neptune.glb"],                 radius: 2.65, gap: 9.0, orbitDays: 60182,    rotationDays: 0.67125, angle: 0.2, color: 0x5a7be0 }
 ];
 const EARTH_PLANET = PLANETS.find((planet) => planet.isEarth);
 
@@ -315,7 +355,34 @@ const PLANET_INFO = {
     surface: "Không có bề mặt rắn; khí quyển chứa metan nên có màu xanh lam đậm, xuất hiện các cơn bão lớn và gió có thể vượt 2.000 km/h."
   }
 };
-PLANETS.forEach((planet) => { planet.info = PLANET_INFO[planet.key]; });
+PLANETS.forEach((planet) => {
+  const info = PLANET_INFO[planet.key];
+  planet.info = {
+    summary: info.summary,
+    facts: [
+      ["Khoảng cách tới Mặt Trời", info.distance],
+      ["Chu kỳ quỹ đạo", info.period],
+      ["Địa hình", info.surface]
+    ]
+  };
+});
+
+// Thông tin Mặt Trời (bấm vào Mặt Trời khi xem cả Hệ Mặt Trời)
+const SUN_DEF = {
+  key: "sun",
+  name: "Mặt Trời",
+  isSun: true,
+  kicker: "NGÔI SAO TRUNG TÂM",
+  info: {
+    summary: "Ngôi sao ở trung tâm Hệ Mặt Trời, khoảng 4,6 tỉ năm tuổi, chứa khoảng 99,86% khối lượng của cả hệ và là nguồn cung cấp ánh sáng, nhiệt cho các hành tinh.",
+    facts: [
+      ["Kích thước", "Đường kính khoảng 1,39 triệu km, gấp khoảng 109 lần Trái Đất."],
+      ["Nhiệt độ", "Bề mặt khoảng 5.500 °C; lõi khoảng 15 triệu °C."],
+      ["Thành phần", "Chủ yếu là hydro (khoảng 73%) và heli (khoảng 25%)."],
+      ["Chu kỳ tự quay", "Khoảng 25 ngày Trái Đất ở xích đạo, chậm hơn ở hai cực (khoảng 35 ngày)."]
+    ]
+  }
+};
 let solarMaxRadius = 0;
 
 // Bố cục: quỹ đạo sau = quỹ đạo trước + bán kính vật trước + KHOẢNG TRỐNG + bán kính của chính nó.
@@ -789,6 +856,8 @@ async function buildSolarSystem() {
       ring,
       label,
       angle: planet.angle,
+      orbitSpeed: orbitAngularSpeed(planet.orbitDays),
+      spinSpeed: spinAngularSpeed(planet.rotationDays),
       radius: planet.radius,
       getWorldPosition(out) { return out.copy(this.pivot.position); } // nhóm hành tinh nằm sát gốc toạ độ nên vị trí = vị trí thế giới
     });
@@ -832,7 +901,7 @@ function setLabelFade(label, amount) {
 }
 
 // Cập nhật mỗi khung hình: vị trí Trái Đất, quỹ đạo, Mặt Trời phình to và các hành tinh
-function updateSolarSystem(delta, smooth) {
+function updateSolarSystem(delta, smooth, simDelta) {
   solarProgress += (solarTarget - solarProgress) * smooth;
   if (Math.abs(solarTarget - solarProgress) < 0.0005) solarProgress = solarTarget;
 
@@ -853,15 +922,14 @@ function updateSolarSystem(delta, smooth) {
 
   // Các hành tinh chỉ hiện (phóng to tại chỗ) khi Trái Đất đã gần tới vị trí cuối: g = 0 → 1
   const g = THREE.MathUtils.smoothstep(solarProgress, 0.85, 1);
-  setLabelFade(sunLabel, g);
+  setLabelFade(sunLabel, focusedBody === sunBody ? 0 : g);
   if (!solarGroup) return;
   solarGroup.visible = g > 0.002;
 
   solarPlanets.forEach((item) => {
-    if (!isPaused) {
-      item.angle -= item.def.speed * delta; // cùng chiều với Trái Đất
-      item.spin.rotation.y += item.def.spin * delta;
-    }
+    // simDelta = thời gian mô phỏng (đã nhân hệ số tốc độ, bằng 0 khi tạm dừng) - cùng đồng hồ với Trái Đất
+    item.angle -= simDelta * item.orbitSpeed; // cùng chiều với Trái Đất
+    item.spin.rotation.y += simDelta * item.spinSpeed;
     const r = item.def.orbitRadius;
     item.pivot.position.set(Math.cos(item.angle) * r, 0, Math.sin(item.angle) * r);
     item.pivot.scale.setScalar(Math.max(g, 0.0001));
@@ -881,6 +949,14 @@ const focusOffset = new THREE.Vector3(); // vị trí camera so với hành tinh
 let focusDistance = 10;
 
 // Trái Đất cũng bấm được (không nằm trong solarPlanets vì có nhóm riêng)
+// Mặt Trời cũng bấm được khi xem cả Hệ Mặt Trời
+const sunBody = {
+  def: SUN_DEF,
+  get radius() { return SOLAR_SUN_RADIUS; },
+  getWorldPosition(out) { return out.set(0, 0, 0); },
+  get label() { return sunLabel; }
+};
+
 const earthBody = {
   def: EARTH_PLANET,
   radius: EARTH_DISPLAY_RADIUS,
@@ -895,26 +971,36 @@ const CAPTIONS = {
 };
 const HINTS = {
   default: "Kéo chuột để quan sát · Cuộn chuột để phóng to/thu nhỏ",
-  solar: "Bấm vào hành tinh để xem thông tin · Kéo chuột để xoay · Cuộn chuột để phóng to/thu nhỏ",
-  focus: "Kéo chuột để xoay quanh hành tinh · Cuộn chuột để phóng to/thu nhỏ · Esc để quay lại"
+  solar: "Bấm vào Mặt Trời hoặc hành tinh để xem thông tin · Kéo chuột để xoay · Cuộn chuột để phóng to/thu nhỏ",
+  focus: "Kéo chuột để xoay quanh · Cuộn chuột để phóng to/thu nhỏ · Esc để quay lại"
 };
 
 function refreshCaption() {
-  stageCaption.textContent = focusedBody
-    ? `Đang quan sát ${focusedBody.def.name} · hành tinh thứ ${PLANETS.indexOf(focusedBody.def) + 1} tính từ Mặt Trời`
-    : CAPTIONS[viewMode];
+  if (focusedBody) {
+    stageCaption.textContent = focusedBody.def.isSun
+      ? "Đang quan sát Mặt Trời · ngôi sao ở trung tâm Hệ Mặt Trời"
+      : `Đang quan sát ${focusedBody.def.name} · hành tinh thứ ${PLANETS.indexOf(focusedBody.def) + 1} tính từ Mặt Trời`;
+  } else {
+    stageCaption.textContent = CAPTIONS[viewMode];
+  }
   if (hintText) hintText.textContent = focusedBody ? HINTS.focus : (viewMode === "solar" ? HINTS.solar : HINTS.default);
 }
 
 function showPlanetCard(body) {
-  if (!planetCard) return;
+  if (!planetCard || !planetFacts) return;
   const info = body.def.info;
-  planetKicker.textContent = `HÀNH TINH THỨ ${PLANETS.indexOf(body.def) + 1} TỪ MẶT TRỜI`;
+  planetKicker.textContent = body.def.kicker || `HÀNH TINH THỨ ${PLANETS.indexOf(body.def) + 1} TỪ MẶT TRỜI`;
   planetName.textContent = body.def.name;
   planetSummary.textContent = info.summary;
-  planetDistance.textContent = info.distance;
-  planetPeriod.textContent = info.period;
-  planetSurface.textContent = info.surface;
+  planetFacts.replaceChildren(...info.facts.map(([label, text]) => {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = text;
+    row.append(term, detail);
+    return row;
+  }));
   planetCard.hidden = false;
   planetCard.scrollTop = 0;
 }
@@ -1016,7 +1102,7 @@ function pickBodyAt(clientX, clientY) {
   const py = clientY - rect.top;
   let best = null;
   let bestDistance = Infinity;
-  for (const body of [...solarPlanets, earthBody]) {
+  for (const body of [...solarPlanets, earthBody, sunBody]) {
     const info = getBodyScreenInfo(body, rect);
     if (!info) continue;
     const reach = Math.max(info.radiusPx, 10) + 10;
@@ -1126,8 +1212,8 @@ async function loadModels() {
       }
     });
 
-    earthTiltGroup.add(earthModel);
-    sunPivot.add(sunModel);
+    earthSpin.add(earthModel);
+    sunSpin.add(sunModel);
 
     // Bọc trong một nhóm đặt cách Trái Đất 2.8 để giữ nguyên phần căn tâm của mô hình
     const moonHolder = new THREE.Group();
@@ -1138,8 +1224,9 @@ async function loadModels() {
 
     addEarthAnnotations(earthRadius);
 
-    earthModel.rotation.y = -0.35;
-    sunModel.rotation.y = 0.3;
+    // Góc xoay ban đầu đặt trên nhóm tự quay (không đặt trên mô hình) để tâm luôn nằm đúng gốc
+    earthSpin.rotation.y = -0.35;
+    sunSpin.rotation.y = 0.3;
     sunPivot.visible = false;
 
     loadingElement.hidden = true;
@@ -1186,6 +1273,34 @@ pauseButton.addEventListener("click", () => {
   isPaused = !isPaused;
   pauseButton.textContent = isPaused ? "Tiếp tục" : "Tạm dừng";
 });
+
+// ------------------------------------------
+// Nút chọn tốc độ mô phỏng (x1 mặc định - thật chậm; x2, x4, x6, x8)
+// Muốn thêm mức khác (vd x16) chỉ cần thêm một nút có data-speed="16" trong index.html
+// ------------------------------------------
+function formatDuration(totalSeconds) {
+  const seconds = Math.round(totalSeconds);
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  const parts = [];
+  if (minutes > 0) parts.push(`${minutes} phút`);
+  if (rest > 0 || minutes === 0) parts.push(`${rest} giây`);
+  return parts.join(" ");
+}
+
+function setTimeScale(scale) {
+  timeScale = scale;
+  speedButtons.forEach((button) => {
+    const active = Number(button.dataset.speed) === scale;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (speedReadout) speedReadout.textContent = `1 năm Trái Đất ≈ ${formatDuration(EARTH_YEAR_SECONDS / scale)}`;
+}
+speedButtons.forEach((button) => {
+  button.addEventListener("click", () => setTimeScale(Number(button.dataset.speed)));
+});
+setTimeScale(1);
 resetButton.addEventListener("click", () => {
   if (focusedBody) {
     focusBody(focusedBody); // đặt lại góc nhìn quanh hành tinh đang xem
@@ -1222,21 +1337,24 @@ function animate() {
   // 1. Sao lấp lánh nhẹ nhàng
   starUniforms.uTime.value = elapsedTime;
   
+  // Thời gian mô phỏng: nhân hệ số tốc độ (x1…x8), bằng 0 khi tạm dừng. MỌI chuyển động đều dùng chung giá trị này.
+  const simDelta = isPaused ? 0 : delta * timeScale;
+
   // 2. Chuyển động xoay của các vật thể
   if (!isPaused) {
-    if (earthModel) earthModel.rotation.y += delta * 0.16;
+    earthSpin.rotation.y += simDelta * EARTH_SPIN_SPEED;
     // (Mặt Trăng không tự quay riêng - luôn hướng một mặt về Trái Đất)
     
-    moonOrbitPivot.rotation.y += delta * MOON_ORBIT_SPEED;
+    moonOrbitPivot.rotation.y += simDelta * MOON_ORBIT_SPEED;
 
     if (isSunVisible) {
-      earthOrbitGroup.rotation.y += delta * 0.25;
+      earthOrbitGroup.rotation.y += simDelta * EARTH_ORBIT_SPEED;
       sunLight.position.copy(sunPivot.position);
       sunLight.target.position.copy(earthPivot.localToWorld(new THREE.Vector3(0, 0, 0)));
       sunLight.target.updateMatrixWorld();
     }
 
-    if (sunModel) sunModel.rotation.y += delta * 0.10;
+    sunSpin.rotation.y += simDelta * SUN_SPIN_SPEED; // Mặt Trời tự quay tại chỗ
   }
 
   // Về chế độ chỉ có Trái Đất: êm ái đưa góc quỹ đạo về 0 (thay vì nhảy tức thì)
@@ -1249,7 +1367,7 @@ function animate() {
   // Giữ hướng trục Trái Đất cố định trong không gian khi nó quay quanh Mặt Trời
   // (nếu không, trục nghiêng sẽ bị quỹ đạo "xoay theo" và lắc lư)
   earthPivot.rotation.y = -earthOrbitGroup.rotation.y;
-  updateSolarSystem(delta, smooth);
+  updateSolarSystem(delta, smooth, simDelta);
   ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbientIntensity, 0.05);
   fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, targetFillIntensity, 0.05);
 
